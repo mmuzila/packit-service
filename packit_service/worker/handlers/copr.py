@@ -346,6 +346,11 @@ class CoprBuildEndHandler(AbstractCoprBuildReportHandler):
         )
         self.build.set_status(PG_COPR_BUILD_STATUS_SUCCESS)
 
+        built_packages = build_job_helper.get_built_packages(
+            self.build.id, self.build.target
+        )
+        self.build.set_built_packages(built_packages)
+
         if (
             build_job_helper.job_tests
             and self.copr_event.chroot in build_job_helper.tests_targets

@@ -96,7 +96,7 @@ class TestingFarmJobHelper(CoprBuildJobHelper):
 
         return self.metadata.commit_sha
 
-    def _payload(self, build_id: int, chroot: str) -> dict:
+    def _payload(self, build_id: int, chroot: str, built_packages: list) -> dict:
         """
         Testing Farm API: https://testing-farm.gitlab.io/api/
 
@@ -112,6 +112,21 @@ class TestingFarmJobHelper(CoprBuildJobHelper):
         if self.fmf_ref:
             fmf["ref"] = self.fmf_ref
 
+        artifacts = [
+            {
+                "id": f"{build_id}:{chroot}",
+                "type": "fedora-copr-build",
+            }
+        ]
+
+        if built_packages:
+            for i in built_packages:
+                # do not list src package
+                if i["arch"] == "src":
+                    continue
+                nvr = f"{i['name']}-{i['epoch']}:{i['version']}-{i['release']}.{i['arch']}"
+                artifacts.append({"id": nvr, "type": "package"})
+
         return {
             "api_key": self.tft_token,
             "test": {
@@ -121,12 +136,7 @@ class TestingFarmJobHelper(CoprBuildJobHelper):
                 {
                     "arch": arch,
                     "os": {"compose": compose},
-                    "artifacts": [
-                        {
-                            "id": f"{build_id}:{chroot}",
-                            "type": "fedora-copr-build",
-                        }
-                    ],
+                    "artifacts": artifacts,
                     "tmt": {
                         "context": {"distro": distro, "arch": arch, "trigger": "commit"}
                     },
@@ -328,7 +338,7 @@ class TestingFarmJobHelper(CoprBuildJobHelper):
 
         logger.info("Sending testing farm request...")
         if self.is_fmf_configured():
-            payload = self._payload(int(build.build_id), chroot)
+            payload = self._payload(int(build.build_id), chroot, build.built_packages)
         else:
             payload = self._payload_install_test(int(build.build_id), chroot)
         endpoint = "requests"
