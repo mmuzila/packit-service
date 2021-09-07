@@ -230,9 +230,11 @@ def test_distro2compose(distro, compose, use_internal_tf):
         "copr_project,"
         "build_id,"
         "chroot,"
+        "built_packages,"
         "distro,"
         "compose,"
-        "arch"
+        "arch,"
+        "built_packages_artifacts"
     ),
     [
         (
@@ -250,9 +252,11 @@ def test_distro2compose(distro, compose, use_internal_tf):
             "cool-project",
             "123456",
             "centos-stream-x86_64",
+            None,
             "centos-stream",
             "Fedora-Rawhide",
             "x86_64",
+            [],
         ),
         (
             "https://api.dev.testing-farm.io/v0.1/",
@@ -269,9 +273,11 @@ def test_distro2compose(distro, compose, use_internal_tf):
             "cool-project",
             "123456",
             "centos-stream-x86_64",
+            None,
             "centos-stream",
             "Fedora-Rawhide",
             "x86_64",
+            [],
         ),
         (
             "https://api.dev.testing-farm.io/v0.1/",
@@ -288,9 +294,48 @@ def test_distro2compose(distro, compose, use_internal_tf):
             "cool-project",
             "123456",
             "centos-stream-x86_64",
+            None,
             "centos-stream",
             "Fedora-Rawhide",
             "x86_64",
+            [],
+        ),
+        # Testing built_packages
+        (
+            "https://api.dev.testing-farm.io/v0.1/",
+            "very-secret",
+            "internal-very-secret",  # internal TF configured
+            True,  # internal TF enabled in the config
+            "test",
+            "packit",
+            "packit-service",
+            "feb41e5",
+            "https://github.com/packit/packit",
+            "master",
+            "me",
+            "cool-project",
+            "123456",
+            "centos-stream-x86_64",
+            [
+                {
+                    "arch": "x86_64",
+                    "epoch": 0,
+                    "name": "cool-project",
+                    "release": "2.el8",
+                    "version": "0.1.0",
+                },
+                {
+                    "arch": "src",
+                    "epoch": 0,
+                    "name": "cool-project",
+                    "release": "2.el8",
+                    "version": "0.1.0",
+                },
+            ],
+            "centos-stream",
+            "Fedora-Rawhide",
+            "x86_64",
+            ["cool-project-0:0.1.0-2.el8.x86_64"],
         ),
     ],
 )
@@ -309,9 +354,11 @@ def test_payload(
     copr_project,
     build_id,
     chroot,
+    built_packages,
     distro,
     compose,
     arch,
+    built_packages_artifacts,
 ):
     # Soo many things are happening in a single constructor!!!!
     config = flexmock(
@@ -360,18 +407,24 @@ def test_payload(
     job_helper.should_receive("job_owner").and_return(copr_owner)
     job_helper.should_receive("job_project").and_return(copr_project)
     job_helper.should_receive("distro2compose").and_return(compose)
-    payload = job_helper._payload(build_id, chroot)
+    payload = job_helper._payload(build_id, chroot, built_packages)
 
     assert payload["api_key"] == token_to_use
     assert payload["test"]["fmf"] == {
         "url": project_url,
         "ref": commit_sha,
     }
+
+    artifacts = [{"id": f"{build_id}:{chroot}", "type": "fedora-copr-build"}]
+
+    for i in built_packages_artifacts:
+        artifacts.append({"id": i, "type": "package"})
+
     assert payload["environments"] == [
         {
             "arch": arch,
             "os": {"compose": compose},
-            "artifacts": [{"id": f"{build_id}:{chroot}", "type": "fedora-copr-build"}],
+            "artifacts": artifacts,
             "tmt": {"context": {"distro": distro, "arch": arch, "trigger": "commit"}},
         }
     ]
@@ -464,7 +517,7 @@ def test_test_repo(fmf_url, fmf_ref, result_url, result_ref):
     job_helper.should_receive("job_project").and_return(copr_project)
     job_helper.should_receive("distro2compose").and_return(compose)
 
-    payload = job_helper._payload(build_id, chroot)
+    payload = job_helper._payload(build_id, chroot, None)
     assert payload.get("test")
     assert payload["test"].get("fmf")
     assert payload["test"]["fmf"].get("url") == result_url
